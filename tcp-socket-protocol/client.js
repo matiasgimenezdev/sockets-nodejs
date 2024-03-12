@@ -37,6 +37,12 @@ socket.on('end', () => {
 	console.log('disconnected from server');
 });
 
+// --------------------------------------------------------
+
+const _PROMISES_ = {};
+
+// --------------------------------------------------------
+
 //? This function will split the buffer into the different messages that are coming from the server.
 const read = () => {
 	let responses = buffer.split('|');
@@ -67,6 +73,7 @@ const read = () => {
 	return buffer;
 };
 
+//* When a message superates the buffer length, the message will need to be fragmented in different chunks on some way. This is known as fragmentation.
 const write = (socket, id, data) => {
 	let message = '';
 	try {
@@ -78,4 +85,30 @@ const write = (socket, id, data) => {
 	}
 };
 
-//* When a message superates the buffer length, the message will need to be fragmented in different chunks on some way. This is known as fragmentation.
+// --------------------------------------------------------
+
+async function task(socket, data) {
+	const id = Date.now().toString();
+
+	return new Promise(function (resolve, reject) {
+		_PROMISES_[id] = { resolve, reject };
+		write(socket, id, data);
+	});
+}
+
+// --------------------------------------------------------
+
+async function _MAIN_(socket) {
+	try {
+		var result = await task(socket, {
+			type: 'sorpresa',
+			data: [4, 5],
+		});
+
+		console.log(result);
+	} catch (err) {
+		console.error(err);
+	}
+}
+
+// --------------------------------------------------------
