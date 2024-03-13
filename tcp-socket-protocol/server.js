@@ -1,21 +1,22 @@
-import { read } from 'fs';
-import net from 'net';
+const net = require('net');
 
 const server = net.createServer((socket) => {
+	//? This is the buffer that is going to store the data that is coming from the client.
 	let buffer = '';
 
 	socket.on('data', (chunk) => {
 		buffer += chunk.toString();
-
 		try {
-			const data = read(buffer);
-			buffer = data.buffer;
+			const { messages, lastMessage } = read(buffer);
+			buffer = lastMessage;
 
-			data.messages.forEach((message) => {
+			messages.forEach((message) => {
 				parse(message, socket);
 			});
 		} catch (err) {
-			console.error('!!! INTENTO DE HACKEO !!!');
+			console.error(
+				"Error while reading the buffer. It's possible that the data is not in the correct format. It is possible that the client is attempting to hack the server."
+			);
 			socket.end();
 		}
 	});
@@ -31,30 +32,31 @@ server.listen(52030, () => {
 	console.log('Server ready.');
 });
 
-// --------------------------------------------------------
-
 function read(buffer) {
 	let messages = buffer.split('|');
+	//* We store the last message in the buffer, because it is possible that it is not complete.
+	const lastMessage = messages.pop();
 
-	buffer = messages.pop();
 	messages = messages
-		.map((msj) => {
+		.map((message) => {
 			try {
-				msj = JSON.parse(msj);
+				message = JSON.parse(message);
 			} catch (err) {
-				msj = false;
+				message = false;
 			}
 
-			return msj;
+			return message;
 		})
-		.filter(Boolean);
+		.filter((message) => message !== false);
 
-	return { messages, buffer };
+	return { messages, lastMessage };
 }
 
 function write(socket, id, data, error) {
 	try {
 		data = JSON.stringify({ id, data, error });
+		console.log(data);
+
 		socket.write(data + '|');
 	} catch (err) {
 		console.error(data);
@@ -63,17 +65,18 @@ function write(socket, id, data, error) {
 }
 
 function parse(message, socket) {
+	const { type, params } = message.data;
 	console.dir(message, { depth: null });
 
-	if (!_PROTOCOLO_.hasOwnProperty(message.data.type)) {
-		console.error('!!! INTENTO DE HACKEO !!!');
+	if (!protocol.hasOwnProperty(type)) {
+		console.error('That task does not exist in the protocol.');
 		console.error(message);
 		socket.end();
 		return;
 	}
 
 	try {
-		_PROTOCOLO_[message.data.type](socket, message.id, message.data.data);
+		protocol[type](socket, message.id, params);
 	} catch (err) {
 		console.error(message);
 		console.error(err);
@@ -82,16 +85,21 @@ function parse(message, socket) {
 
 // --------------------------------------------------------
 
-const _PROTOCOLO_ = {
-	sorpresa: function (socket, id, data) {
+const protocol = {
+	sum: function (socket, id, data) {
 		setTimeout(function () {
-			const err = Math.random() > 0.5;
+			const error = Math.random() > 0.5;
 
-			if (err) {
-				write(socket, id, { message: 'Error salvaje aparecio.' }, err);
+			if (error) {
+				write(
+					socket,
+					id,
+					{ message: 'Error executing the task' },
+					error
+				);
 			} else {
 				const sum = data.reduce((_, n) => _ + n, 0);
-				write(socket, id, { sum }, err);
+				write(socket, id, { result: sum });
 			}
 		}, Math.random() * 1000);
 	},

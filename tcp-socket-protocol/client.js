@@ -1,19 +1,20 @@
-import { read } from 'fs';
-import { createConnection } from 'net';
-import { buffer } from 'stream/consumers';
+const net = require('net');
 
 const options = {
-	host: localhost,
+	host: 'localhost',
 	port: 52030,
 };
 
-const socket = createConnection(options, () => {
+const promises = {};
+
+const socket = net.createConnection(options, () => {
 	console.log('connected to server');
 
 	//? buffer => a buffer is a variable that is acumulating the chunks of data that are coming from the other end. The buffer assures that we are not loosing any data.
 	//? On every socket connection we will need to use a buffer to store the data that is coming from the other end. Also is necessary to use a separator
 	//? to split the data. The separator is going to be a caracter or something that the protocol defines.
-	const buffer = '';
+	//* Buffer initialization
+	let buffer = '';
 
 	socket.on('data', (chunk) => {
 		buffer += chunk.toString();
@@ -29,42 +30,38 @@ const socket = createConnection(options, () => {
 		buffer = read(buffer);
 	});
 
-	//? _MAIN_ is a function that is going to be called when the socket is connected to the server.
-	_MAIN_(socket);
+	//* The socket is connected, so we can call the main function.
+	main(socket);
 });
 
 socket.on('end', () => {
 	console.log('disconnected from server');
 });
 
-// --------------------------------------------------------
-
-const _PROMISES_ = {};
-
-// --------------------------------------------------------
-
 //? This function will split the buffer into the different messages that are coming from the server.
-const read = () => {
-	let responses = buffer.split('|');
-	buffer.pop();
+const read = (buffer) => {
+	const separator = '|';
+	let responses = buffer.split(separator);
+	//* The last element of the array is going to be an empty string, so we need to remove it.
+	responses.pop();
 
-	//* Data serialization
 	try {
-		responses = response.map((response) => JSON.parse(response));
+		//* Data serialization
+		responses = responses.map((message) => JSON.parse(message));
 		responses.forEach((message) => {
-			//* expected message structure => { id: 1, data: 'some data'}
-			if (!_PROMISES_.hasOwnProperty(message.id)) {
+			if (!promises.hasOwnProperty(message.id)) {
 				return;
 			}
 
 			if (message.error) {
-				_PROMISES_[message.id].reject(message.data);
-				delete _PROMISES_[message.id];
+				promises[message.id].reject(message.data.message);
+				delete promises[message.id];
 				return;
 			}
 
-			_PROMISES_[message.id].resolve(message.data);
-			delete _PROMISES_[message.id];
+			//* We are going to resolve the promise with the data that is coming from the server. This will return the result to the main function.
+			promises[message.id].resolve(message.data.result);
+			delete promises[message.id];
 		});
 	} catch (error) {
 		console.error(buffer);
@@ -73,7 +70,7 @@ const read = () => {
 	return buffer;
 };
 
-//* When a message superates the buffer length, the message will need to be fragmented in different chunks on some way. This is known as fragmentation.
+//? This function will write the data to the server.
 const write = (socket, id, data) => {
 	let message = '';
 	try {
@@ -85,30 +82,26 @@ const write = (socket, id, data) => {
 	}
 };
 
-// --------------------------------------------------------
-
+//? This function is going to be called when we want to send a task to the server.
 async function task(socket, data) {
 	const id = Date.now().toString();
 
-	return new Promise(function (resolve, reject) {
-		_PROMISES_[id] = { resolve, reject };
+	return new Promise((resolve, reject) => {
+		//* We are going to store the resolve and reject functions in the promises object. So when the server sends the response we can resolve/reject the promise (task).
+		promises[id] = { resolve, reject };
 		write(socket, id, data);
 	});
 }
 
-// --------------------------------------------------------
-
-async function _MAIN_(socket) {
+//? This is the main function that is going to be called once the socket is connected to the server.
+async function main(socket) {
 	try {
-		var result = await task(socket, {
-			type: 'sorpresa',
-			data: [4, 5],
+		const result = await task(socket, {
+			type: 'sum',
+			params: [4, 5],
 		});
-
-		console.log(result);
-	} catch (err) {
-		console.error(err);
+		console.log('Task result: ' + result);
+	} catch (error) {
+		console.error('Task execution failed: ' + error);
 	}
 }
-
-// --------------------------------------------------------
